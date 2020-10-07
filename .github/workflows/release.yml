@@ -72,7 +72,10 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: release
-          path: ./src/github.com/elsaland/elsa/elsa-${{ matrix.os }}
+          path: |
+             ./src/github.com/elsaland/elsa/elsa-nightly-x86_64-apple-darwin.zip
+             ./src/github.com/elsaland/elsa/elsa-nightly-x86_64-pc-windows-msvc.zip
+             ./src/github.com/elsaland/elsa/elsa-nightly-x86_64-unknown-linux-gnu.zip
   upload:
     name: upload / ${{ matrix.tag }}
     runs-on: ubuntu-latest
