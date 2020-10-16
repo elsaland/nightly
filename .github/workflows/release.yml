@@ -6,13 +6,13 @@ on:
     - cron: "0 0 * * *" # Everyday at ~00:00 UTC
 
 jobs:
-  build:
+  build-mac-linux:
     name: build / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        os: [macos-latest, ubuntu-latest]
 
     env:
       GOPATH: ${{ github.workspace }}
@@ -26,10 +26,6 @@ jobs:
         id: now
         with:
           format: YYYY.MM.DD
-
-      - name: Enable long paths on windows
-        if: startsWith(matrix.os, 'windows')
-        run: git config --global core.longpaths true
 
       - name: Clone repository
         uses: actions/checkout@v2
@@ -53,37 +49,69 @@ jobs:
         working-directory: ./src/github.com/elsaland/elsa
         run: go build --ldflags "-s -w" -o elsa-${{ matrix.os }} .
 
-      - name: Zip linux release
-        if: startsWith(matrix.os, 'ubuntu')
-        working-directory: ./src/github.com/elsaland/elsa
-        run: zip -r elsa-nightly-x86_64-unknown-linux-gnu.zip elsa-${{ matrix.os }}
+      - name: Upload Builds
+        uses: actions/upload-artifact@v2
+        with:
+          name: release
+          path: ./src/github.com/elsaland/elsa/elsa-${{ matrix.os }}
 
-      - name: Zip mac release
-        if: startsWith(matrix.os, 'macOS')
-        working-directory: ./src/github.com/elsaland/elsa
-        run: zip -r elsa-nightly-x86_64-apple-darwin.zip elsa-${{ matrix.os }}
+  build-windows:
+    name: build / windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 60
 
-      - name: Zip windows release
-        if: startsWith(matrix.os, 'windows')
+    env:
+      GOPATH: ${{ github.workspace }}
+
+    outputs:
+      tag: ${{ steps.now.outputs.formattedTime }}
+
+    steps:
+      - name: Get current date # To use as tag
+        uses: 1466587594/get-current-time@v1
+        id: now
+        with:
+          format: YYYY.MM.DD
+
+      - name: Enable long paths on windows
+        run: git config --global core.longpaths true
+
+      - name: Clone repository
+        uses: actions/checkout@v2
+        with:
+          repository: "elsaland/elsa"
+          fetch-depth: 1 # No need for full version history
+          submodules: true
+          path: "./src/github.com/elsaland/elsa"
+
+      - name: Setup go
+        uses: actions/setup-go@v2
+
+      - name: Install go-bindata
+        run: go get github.com/go-bindata/go-bindata
+
+      - name: Run bootstrap
         working-directory: ./src/github.com/elsaland/elsa
-        run: Compress-Archive -CompressionLevel Optimal -Force -Path elsa-${{ matrix.os }} -DestinationPath elsa-nightly-x86_64-pc-windows-msvc.zip
+        run: go run ./bootstrap/
+
+      - name: Build
+        working-directory: ./src/github.com/elsaland/elsa
+        run: go build --ldflags "-s -w" -o elsa-windows-latest.exe .
 
       - name: Upload Builds
         uses: actions/upload-artifact@v2
         with:
           name: release
-          path: |
-             ./src/github.com/elsaland/elsa/elsa-nightly-x86_64-apple-darwin.zip
-             ./src/github.com/elsaland/elsa/elsa-nightly-x86_64-pc-windows-msvc.zip
-             ./src/github.com/elsaland/elsa/elsa-nightly-x86_64-unknown-linux-gnu.zip
+          path: ./src/github.com/elsaland/elsa/elsa-windows-latest.exe
+  
   upload:
     name: upload / ${{ matrix.tag }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        tag: ["latest", "${{ needs.build.outputs.tag }}"]
+        tag: ["latest", "${{ needs.build-mac-linux.outputs.tag }}"]
 
-    needs: build
+    needs: [build-mac-linux, build-windows]
     steps:
       - name: Download Builds
         uses: actions/download-artifact@v2
